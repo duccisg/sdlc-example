@@ -4,8 +4,6 @@ from copy import deepcopy
 from typing import Dict, Optional
 from uuid import uuid4
 
-from langgraph.types import RunnableConfig
-
 from app.models.workflow import SDLCPhase, WorkflowState
 from app.workflows.sdlc_graph import SDLCWorkflowGraph
 
@@ -22,7 +20,7 @@ class WorkflowOrchestrator:
     def __init__(self, graph: SDLCWorkflowGraph, recursion_limit: int = 50) -> None:
         self._graph = graph
         self._sessions: Dict[str, WorkflowState] = {}
-        self._config = RunnableConfig(recursion_limit=recursion_limit)
+        self._recursion_limit = recursion_limit
 
     def start(self, initial_message: str) -> WorkflowState:
         workflow_id = str(uuid4())
@@ -36,7 +34,7 @@ class WorkflowOrchestrator:
             "user_message": initial_message,
         }
 
-        result = self._graph.app.invoke(initial_state, config=self._config)
+        result = self._graph.run(initial_state, recursion_limit=self._recursion_limit)
         self._sessions[workflow_id] = result
         return result
 
@@ -54,7 +52,7 @@ class WorkflowOrchestrator:
         updated_state["pending_confirmation"] = False
         updated_state["user_message"] = user_message
 
-        result = self._graph.app.invoke(updated_state, config=self._config)
+        result = self._graph.run(updated_state, recursion_limit=self._recursion_limit)
         self._sessions[workflow_id] = result
         return result
 

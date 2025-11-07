@@ -5,15 +5,12 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "sdlc-agent-platform"
 version = "0.1.0"
-description = "Multi-agent SDLC orchestration platform built with LangChain, LangGraph, and LangFuse"
+description = "Multi-agent SDLC orchestration platform built with FastAPI and LangFuse"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "fastapi>=0.115.0",
     "uvicorn[standard]>=0.30.0",
-    "langchain>=0.2.10",
-    "langchain-openai>=0.1.14",
-    "langgraph>=0.0.52",
     "langfuse>=2.3.0",
     "pydantic>=2.7.0",
     "pydantic-settings>=2.0.3",

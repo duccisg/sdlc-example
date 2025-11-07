@@ -2,8 +2,6 @@ from __future__ import annotations
 
 from typing import Dict
 
-from langchain_core.language_models.chat_models import BaseChatModel
-
 from app.agents.analysis_agent import SolutionAnalysisAgent
 from app.agents.base import SDLCBaseAgent
 from app.agents.deployment_agent import DeploymentAgent
@@ -13,6 +11,7 @@ from app.agents.intake_agent import RequirementIntakeAgent
 from app.agents.retrospective_agent import RetrospectiveAgent
 from app.agents.testing_agent import TestingAgent
 from app.models.workflow import SDLCPhase
+from app.utils.llm import BaseChatModel
 
 
 class AgentRegistry:
