@@ -1,59 +1,114 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import Optional, Protocol
 
-from langchain_core.callbacks.manager import CallbackManagerForLLMRun
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
-from langchain_core.outputs import ChatGeneration, ChatResult
-
-try:
-    from langchain_openai import ChatOpenAI
-except ImportError:  # pragma: no cover - optional dependency
-    ChatOpenAI = None  # type: ignore
+import httpx
 
 from app.config import Settings
+
+
+class BaseChatModel(Protocol):
+    """Minimal protocol for chat-based language models used by the agents."""
+
+    def generate(self, system_prompt: str, user_input: str) -> str:
+        ...
+
+
+class OpenAIChatModel:
+    """Lightweight OpenAI Chat Completions client based on httpx."""
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        model: str = "gpt-4o-mini",
+        temperature: float = 0.3,
+        base_url: str = "https://api.openai.com/v1",
+        timeout: float = 30.0,
+    ) -> None:
+        self._api_key = api_key
+        self._model = model
+        self._temperature = temperature
+        self._base_url = base_url.rstrip("/")
+        self._timeout = timeout
+
+    def generate(self, system_prompt: str, user_input: str) -> str:
+        """Call the OpenAI Chat Completions API and return the assistant message."""
+
+        payload = {
+            "model": self._model,
+            "temperature": self._temperature,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input},
+            ],
+        }
+
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
+        try:
+            response = httpx.post(
+                f"{self._base_url}/chat/completions",
+                json=payload,
+                headers=headers,
+                timeout=self._timeout,
+            )
+            response.raise_for_status()
+        except httpx.HTTPError as exc:  # pragma: no cover - network failure
+            raise RuntimeError("Failed to call OpenAI Chat Completions API") from exc
+
+        data = response.json()
+        choices = data.get("choices", [])
+        if not choices:
+            raise RuntimeError("OpenAI response did not include any choices")
+
+        message = choices[0].get("message") or {}
+        content = message.get("content")
+        if content is None:
+            raise RuntimeError("OpenAI response choice did not include message content")
+
+        return content.strip()
+
+
+class StubChatModel:
+    """Deterministic chat model useful for local development and tests."""
+
+    def __init__(
+        self,
+        *,
+        default_message: str,
+        responses: Optional[list[str]] = None,
+    ) -> None:
+        self._default_message = default_message
+        self._responses = list(responses or [])
+
+    def generate(self, system_prompt: str, user_input: str) -> str:  # noqa: D401
+        if self._responses:
+            return self._responses.pop(0)
+        return self._default_message
 
 
 def create_default_llm(settings: Settings, responses: Optional[list[str]] = None) -> BaseChatModel:
     """Return a chat model based on available credentials.
 
-    If OpenAI credentials are available, use ChatOpenAI. Otherwise fall back to a
-    deterministic fake LLM useful for local development and testing.
+    If OpenAI credentials are available, use the real API client. Otherwise fall back to
+    a deterministic fake LLM useful for local development and testing.
     """
 
-    if settings.openai_api_key and ChatOpenAI is not None:
-        return ChatOpenAI(
+    if settings.openai_api_key:
+        return OpenAIChatModel(
+            api_key=settings.openai_api_key,
             model="gpt-4o-mini",
             temperature=0.3,
-            openai_api_key=settings.openai_api_key,
         )
 
-    # Fallback deterministic model for offline development
+    responses_queue = list(responses or [])
     default_message = (
-        responses[0]
-        if responses
+        responses_queue[0]
+        if responses_queue
         else "Stub response. Configure OPENAI_API_KEY to enable full LLM output."
     )
-    return StubChatModel(message=default_message)
-
-
-class StubChatModel(BaseChatModel):
-    def __init__(self, message: str):
-        super().__init__()
-        self._message = message
-
-    @property
-    def _llm_type(self) -> str:  # pragma: no cover - metadata
-        return "stub-chat-model"
-
-    def _generate(
-        self,
-        messages: List[BaseMessage],
-        stop: Optional[List[str]] = None,
-        run_manager: Optional[CallbackManagerForLLMRun] = None,
-        **kwargs,
-    ) -> ChatResult:
-        message = AIMessage(content=self._message)
-        generation = ChatGeneration(message=message)
-        return ChatResult(generations=[generation])
+    return StubChatModel(default_message=default_message, responses=responses_queue)

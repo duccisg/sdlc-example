@@ -3,11 +3,8 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from typing import Optional
 
-from langchain_core.language_models.chat_models import BaseChatModel
-from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
-from langchain_core.prompts import ChatPromptTemplate
-
 from app.models.workflow import AgentResult, SDLCPhase, WorkflowState
+from app.utils.llm import BaseChatModel
 
 
 class SDLCBaseAgent(ABC):
@@ -17,12 +14,6 @@ class SDLCBaseAgent(ABC):
 
     def __init__(self, llm: BaseChatModel) -> None:
         self.llm = llm
-        self.prompt = ChatPromptTemplate.from_messages(
-            [
-                SystemMessage(content=self.system_prompt),
-                HumanMessage(content="{input}"),
-            ]
-        )
 
     @abstractmethod
     def build_human_input(self, state: WorkflowState, user_message: Optional[str]) -> str:
@@ -30,17 +21,16 @@ class SDLCBaseAgent(ABC):
 
     def run(self, state: WorkflowState, user_message: Optional[str]) -> AgentResult:
         human_input = self.build_human_input(state, user_message)
-        chain = self.prompt | self.llm
-        response: AIMessage = chain.invoke({"input": human_input})
-        return self.parse_response(response, state)
+        response_text = self.llm.generate(self.system_prompt, human_input)
+        return self.parse_response(response_text, state)
 
-    def parse_response(self, response: AIMessage, state: WorkflowState) -> AgentResult:
+    def parse_response(self, response_text: str, state: WorkflowState) -> AgentResult:
         return AgentResult(
             agent=self.name,
             phase=self.phase,
-            output=response.content,
+            output=response_text,
             artifacts={
-                "raw": response.content,
+                "raw": response_text,
             },
             requires_confirmation=True,
         )
