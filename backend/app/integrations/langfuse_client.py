@@ -1,12 +1,18 @@
 from __future__ import annotations
 
+import logging
 from contextlib import contextmanager
 from typing import Iterator, Optional
+
+logger = logging.getLogger(__name__)
 
 try:
     from langfuse import Langfuse
 except ImportError:  # pragma: no cover - optional dependency
-    Langfuse = None  # type: ignore
+    Langfuse = None  # type: ignore[misc,assignment]
+except Exception as exc:  # pragma: no cover - optional dependency
+    logger.warning("Langfuse integration disabled due to import failure: %s", exc)
+    Langfuse = None  # type: ignore[misc,assignment]
 
 from app.config import Settings
 
